@@ -1,0 +1,25 @@
+[package]
+name = "copilot-busylight-setup"
+version.workspace = true
+license.workspace = true
+authors.workspace = true
+edition = "2024"
+description = "Installer for copilot-busylight"
+publish = false
+
+[[bin]]
+name = "copilot-busylight-setup"
+path = "src/main.rs"
+
+[dependencies]
+copilot-busylight = { path = ".." }
+
+[dependencies.windows-sys]
+version = "0.59"
+features = [
+    "Win32_Foundation",
+    "Win32_System_Environment",
+    "Win32_System_Registry",
+    "Win32_System_Threading",
+    "Win32_UI_WindowsAndMessaging",
+]

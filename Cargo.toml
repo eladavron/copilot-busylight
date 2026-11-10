@@ -1,0 +1,58 @@
+[package]
+name = "copilot-busylight"
+version.workspace = true
+license.workspace = true
+authors.workspace = true
+edition = "2024"
+description = "Kuando Busylight status light for the GitHub Copilot agent, as a Windows tray app"
+publish = false
+
+[workspace]
+members = [".", "installer"]
+# The installer embeds the release exes, so build.ps1 builds it after them.
+default-members = ["."]
+
+[workspace.package]
+version = "0.1.0"
+license = "Apache-2.0"
+authors = ["Elad Avron"]
+
+[[bin]]
+name = "copilot-busylight"
+path = "src/main.rs"
+
+[[bin]]
+name = "copilot-busylight-hook"
+path = "src/hook_main.rs"
+
+[dependencies]
+serde_json = "1.0.154"
+
+# 0.59 ships prebuilt import libraries; 0.60+ needs a full MinGW dlltool on the GNU target.
+[dependencies.windows-sys]
+version = "0.59"
+features = [
+    "Win32_Foundation",
+    "Win32_Devices_DeviceAndDriverInstallation",
+    "Win32_Devices_HumanInterfaceDevice",
+    "Win32_Graphics_Gdi",
+    "Win32_Security",
+    "Win32_Storage_FileSystem",
+    "Win32_System_Com",
+    "Win32_System_IO",
+    "Win32_System_LibraryLoader",
+    "Win32_System_Registry",
+    "Win32_System_SystemInformation",
+    "Win32_System_Threading",
+    "Win32_UI_HiDpi",
+    "Win32_UI_Shell",
+    "Win32_UI_Shell_Common",
+    "Win32_UI_WindowsAndMessaging",
+]
+
+[profile.release]
+opt-level = "z"
+lto = true
+codegen-units = 1
+panic = "abort"
+strip = true

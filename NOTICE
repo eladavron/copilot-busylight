@@ -1,0 +1,9 @@
+copilot-busylight
+Copyright 2026 Elad Avron
+
+This product includes software derived from busylight-core
+(https://github.com/JnyJny/busylight-core), Copyright 2025 Erik O'Shaughnessy,
+licensed under the Apache License, Version 2.0.
+
+Binary releases also include third-party components; see
+THIRD-PARTY-NOTICES.txt for their copyright and license notices.

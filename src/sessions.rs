@@ -13,8 +13,14 @@ pub const BUSY_STALE: Duration = Duration::from_secs(15 * 60);
 /// Local chats never send SessionEnd, so idle sessions expire instead.
 pub const IDLE_STALE: Duration = Duration::from_secs(30 * 60);
 pub const SESSION_STALE: Duration = Duration::from_secs(12 * 3600);
-/// Green shown when one chat finishes while others are still working.
-pub const FINISH_FLASH: Duration = Duration::from_secs(5);
+/// One green blink (on, then off); a finished chat blinks `FINISH_BLINKS` times.
+pub const BLINK_ON: Duration = Duration::from_millis(400);
+pub const BLINK_PERIOD: Duration = Duration::from_millis(800);
+pub const FINISH_BLINKS: u32 = 3;
+pub const FINISH_BLINK: Duration = BLINK_PERIOD.saturating_mul(FINISH_BLINKS);
+/// A chat counts as just finished only if its file changed this recently, so
+/// the 15-minute busy timeout doesn't blink.
+const FINISH_MAX_AGE: Duration = Duration::from_secs(5);
 
 const FILE_SHARE_ALL: u32 = 0x7;
 
@@ -130,28 +136,37 @@ pub struct Status {
     pub light: Light,
     pub chats: usize,
     pub working: usize,
+    /// Set while the green finish blinks run; `light` is what follows them.
+    pub finished_at: Option<Instant>,
+}
+
+/// Whether the finish blink is lit at `now`; `None` once the blinks are over.
+pub fn blink_lit(finished_at: Option<Instant>, now: Instant) -> Option<bool> {
+    let elapsed = now.saturating_duration_since(finished_at?);
+    (elapsed < FINISH_BLINK).then(|| elapsed.as_millis() % BLINK_PERIOD.as_millis() < BLINK_ON.as_millis())
 }
 
 #[derive(Default)]
 pub struct Tracker {
     previous: Snapshot,
-    flash_until: Option<Instant>,
+    finished_at: Option<Instant>,
 }
 
 impl Tracker {
     pub fn update(&mut self, current: Snapshot, now: Instant) -> Status {
         if self.any_just_finished(&current) {
-            self.flash_until = Some(now + FINISH_FLASH);
+            self.finished_at = Some(now);
         }
-        let mut light = current.values().map(|&(state, _)| state).max().unwrap_or_default();
-        // Attention still wins over the finish flash.
-        if light == Light::Busy && self.flash_until.is_some_and(|until| now < until) {
-            light = Light::Idle;
+        if blink_lit(self.finished_at, now).is_none() {
+            self.finished_at = None;
         }
+        let light = current.values().map(|&(state, _)| state).max().unwrap_or_default();
         let status = Status {
             light,
             chats: current.len(),
             working: current.values().filter(|(state, _)| state.is_working()).count(),
+            // Attention still wins over the finish blinks.
+            finished_at: self.finished_at.filter(|_| light != Light::Attention),
         };
         self.previous = current;
         status
@@ -161,7 +176,7 @@ impl Tracker {
     fn any_just_finished(&self, current: &Snapshot) -> bool {
         current.iter().any(|(name, &(state, age))| {
             let was_working = self.previous.get(name).is_some_and(|(prev, _)| prev.is_working());
-            was_working && state == Light::Idle && age < FINISH_FLASH
+            was_working && state == Light::Idle && age < FINISH_MAX_AGE
         })
     }
 }
@@ -206,27 +221,55 @@ mod tests {
             Status {
                 light: Light::Attention,
                 chats: 3,
-                working: 2
+                working: 2,
+                finished_at: None,
             }
         );
         assert_eq!(tracker.update(Snapshot::new(), now).light, Light::Off);
     }
 
     #[test]
-    fn finish_flashes_green_then_returns_to_busy() {
+    fn finish_blinks_then_returns_to_busy() {
         let mut tracker = Tracker::default();
         let start = Instant::now();
         let zero = Duration::ZERO;
         tracker.update(snapshot(&[("a", Light::Busy, zero), ("b", Light::Busy, zero)]), start);
 
         let finished = snapshot(&[("a", Light::Idle, zero), ("b", Light::Busy, zero)]);
-        assert_eq!(tracker.update(finished.clone(), start).light, Light::Idle);
-        let later = start + FINISH_FLASH + Duration::from_millis(1);
-        assert_eq!(tracker.update(finished, later).light, Light::Busy);
+        let status = tracker.update(finished.clone(), start);
+        assert_eq!((status.light, status.finished_at), (Light::Busy, Some(start)));
+        // Still blinking on a later poll, even though "a" is no longer a fresh transition.
+        let mid = start + FINISH_BLINK / 2;
+        assert_eq!(tracker.update(finished.clone(), mid).finished_at, Some(start));
+        let later = start + FINISH_BLINK + Duration::from_millis(1);
+        assert_eq!(tracker.update(finished, later).finished_at, None);
     }
 
     #[test]
-    fn attention_beats_finish_flash() {
+    fn last_chat_finishing_blinks_then_goes_idle() {
+        let mut tracker = Tracker::default();
+        let start = Instant::now();
+        let zero = Duration::ZERO;
+        tracker.update(snapshot(&[("a", Light::Busy, zero)]), start);
+        let status = tracker.update(snapshot(&[("a", Light::Idle, zero)]), start);
+        assert_eq!((status.light, status.finished_at), (Light::Idle, Some(start)));
+    }
+
+    #[test]
+    fn blinks_three_times() {
+        let start = Instant::now();
+        let at = |ms: u64| blink_lit(Some(start), start + Duration::from_millis(ms));
+        let lit_starts = (0..FINISH_BLINK.as_millis() as u64)
+            .step_by(10)
+            .filter(|&ms| at(ms) == Some(true) && (ms == 0 || at(ms - 10) == Some(false)))
+            .count();
+        assert_eq!(lit_starts, FINISH_BLINKS as usize);
+        assert_eq!(at(FINISH_BLINK.as_millis() as u64), None);
+        assert_eq!(blink_lit(None, start), None);
+    }
+
+    #[test]
+    fn attention_beats_finish_blink() {
         let mut tracker = Tracker::default();
         let now = Instant::now();
         let zero = Duration::ZERO;
@@ -238,16 +281,16 @@ mod tests {
             snapshot(&[("a", Light::Idle, zero), ("b", Light::Attention, zero)]),
             now,
         );
-        assert_eq!(status.light, Light::Attention);
+        assert_eq!((status.light, status.finished_at), (Light::Attention, None));
     }
 
     #[test]
-    fn stale_busy_does_not_flash() {
+    fn stale_busy_does_not_blink() {
         let mut tracker = Tracker::default();
         let now = Instant::now();
         tracker.update(snapshot(&[("a", Light::Busy, 14 * MIN), ("b", Light::Busy, MIN)]), now);
         // "a" turned idle through the 15-minute timeout, so its age is large.
         let status = tracker.update(snapshot(&[("a", Light::Idle, 16 * MIN), ("b", Light::Busy, MIN)]), now);
-        assert_eq!(status.light, Light::Busy);
+        assert_eq!((status.light, status.finished_at), (Light::Busy, None));
     }
 }

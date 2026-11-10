@@ -142,13 +142,18 @@ pub fn run(shared: &Shared, notify: impl Fn()) {
         }
         let paused = shared.paused.load(Relaxed);
         if !remote {
-            let light = if paused { Light::Off } else { status.light };
-            if shown != Some(light) {
-                shown = Some(light);
-                last_sent = None;
-            }
-            if light == Light::Busy || last_sent.is_none_or(|at| now - at >= STEADY_REFRESH) {
-                lamp.show(color_for(light, (now - start).as_secs_f32()), now);
+            let rgb = if paused {
+                color_for(Light::Off, 0.0)
+            } else {
+                match sessions::blink_lit(status.finished_at, now) {
+                    Some(true) => IDLE_COLOR,
+                    Some(false) => color_for(Light::Off, 0.0),
+                    None => color_for(status.light, (now - start).as_secs_f32()),
+                }
+            };
+            if shown != Some(rgb) || last_sent.is_none_or(|at| now - at >= STEADY_REFRESH) {
+                lamp.show(rgb, now);
+                shown = Some(rgb);
                 last_sent = Some(now);
             }
         }

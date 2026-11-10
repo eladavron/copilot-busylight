@@ -6,7 +6,7 @@ Turns a Kuando Busylight into a status light for the GitHub Copilot agent in VS 
 |---|---|
 | Pulsing red | The agent is working (you sent a prompt, it's running tools) |
 | Green | The agent finished and is waiting for your next prompt |
-| Green for 5 s | One chat finished while another is still working |
+| 3 green blinks | A chat finished; then the light shows the state of the remaining chats |
 | Yellow | The agent is asking you a question |
 | Off | No active chat, or paused from the tray menu |
 

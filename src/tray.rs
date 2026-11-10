@@ -230,8 +230,8 @@ fn describe(report: &Report, remote: bool) -> (String, String) {
         }
     };
     let light = match report.status.light {
+        _ if report.status.finished_at.is_some() => "A chat just finished".to_owned(),
         Light::Off => "No active chats".to_owned(),
-        Light::Idle if report.status.working > 0 => "A chat just finished".to_owned(),
         Light::Idle => format!("Idle ({})", chats(report.status.chats)),
         Light::Busy => format!("Working ({} of {})", report.status.working, chats(report.status.chats)),
         Light::Attention => "Needs your input".to_owned(),

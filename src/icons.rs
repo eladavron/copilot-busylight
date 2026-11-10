@@ -40,6 +40,9 @@ impl Icons {
         if report.paused && !remote {
             return self.paused;
         }
+        if report.status.finished_at.is_some() {
+            return self.idle;
+        }
         match report.status.light {
             Light::Off => self.off,
             Light::Idle => self.idle,

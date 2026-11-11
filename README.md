@@ -93,6 +93,8 @@ The **Local** session target (VS Code's older built-in agent) only runs hooks if
 
 Local chats don't report when they close, so an idle Local chat stops counting after 30 minutes.
 
+If your organization disables Copilot preview features, VS Code forces `chat.useHooks` off and Local chats can't drive the light. The **Copilot** session target is not affected.
+
 ## Remote server over RDP (optional)
 
 If you run VS Code on a server you reach over Remote Desktop, the hooks run on the server. They can still drive the light on your PC through RDP drive sharing.

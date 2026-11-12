@@ -9,9 +9,9 @@ use std::sync::{Mutex, PoisonError};
 use std::thread::sleep;
 use std::time::{Duration, Instant};
 
-use crate::kuando;
 use crate::sessions::{self, Light, Status, Tracker};
 use crate::usb::Device;
+use crate::{hook, kuando};
 
 pub const IDLE_COLOR: (u8, u8, u8) = (0, 255, 0);
 pub const BUSY_COLOR: (u8, u8, u8) = (255, 0, 0);
@@ -122,6 +122,10 @@ pub fn run(shared: &Shared, notify: impl Fn()) {
     let mut last_poll: Option<Instant> = None;
     let mut last_sent: Option<Instant> = None;
     let mut last_report = None;
+    let inbox = hook::inbox_dir();
+    let _ = fs::create_dir_all(&inbox);
+    // Events left from before this app started are stale.
+    hook::drain_inbox(&inbox, false);
 
     while !shared.stop.load(Relaxed) {
         let now = Instant::now();
@@ -136,6 +140,7 @@ pub fn run(shared: &Shared, notify: impl Fn()) {
         }
         if last_poll.is_none_or(|at| now - at >= poll) {
             last_poll = Some(now);
+            hook::drain_inbox(&inbox, true);
             reachable = dir.is_dir();
             // The files on a remote PC belong to its tray app; never delete them from here.
             status = tracker.update(sessions::read_all(&dir, remote), now);

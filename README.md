@@ -48,6 +48,7 @@ The installer doesn't need administrator rights; it installs for your user only.
 What the installer does:
 - Puts the tray app, the hook and a copy of itself in `~/.copilot/busylight`.
 - Writes `busylight.json` to `~/.copilot/hooks` (or `$COPILOT_HOME/hooks` if that's set).
+- Writes a WSL version of the hooks into every installed WSL distro (see [WSL](#wsl)).
 - Sets the tray app to start with Windows and starts it.
 - Adds **Copilot Busylight** to **Settings → Apps → Installed apps**, for uninstalling.
 
@@ -94,6 +95,18 @@ The **Local** session target (VS Code's older built-in agent) only runs hooks if
 Local chats don't report when they close, so an idle Local chat stops counting after 30 minutes.
 
 If your organization disables Copilot preview features, VS Code forces `chat.useHooks` off and Local chats can't drive the light. The **Copilot** session target is not affected.
+
+## WSL
+
+Chats running inside WSL (for example VS Code connected to WSL, or Copilot CLI in a WSL terminal) drive the light too. Setup writes `~/.copilot/hooks/busylight.json` into each WSL distro it finds.
+
+> **Note:** setup only sets up the distros that exist when it runs. After adding a new WSL distro, run setup again (it keeps your settings):
+>
+> ```powershell
+> & "$HOME\.copilot\busylight\copilot-busylight-setup.exe" --quiet
+> ```
+
+The WSL hooks don't run any Windows program. Each event saves Copilot's JSON as a file in `~/.copilot/busylight/inbox` on Windows (reached as `/mnt/c/...`), and the tray app reads and deletes those files. Events that arrive while the tray app isn't running are discarded when it starts.
 
 ## Remote server over RDP (optional)
 
@@ -167,7 +180,7 @@ Remove **Copilot Busylight** from **Settings → Apps → Installed apps**, or r
 & "$HOME\.copilot\busylight\copilot-busylight-setup.exe" --uninstall
 ```
 
-This closes the tray app (turning the light off), and removes the files, the hooks file, autostart and the settings. On an RDP server it removes only that server's chat states from your PC's folder.
+This closes the tray app (turning the light off), and removes the files, the hooks files (including the WSL ones), autostart and the settings. On an RDP server it removes only that server's chat states from your PC's folder.
 
 ## Credits
 

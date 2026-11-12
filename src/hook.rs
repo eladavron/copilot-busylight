@@ -24,18 +24,56 @@ pub enum Action {
 pub fn run(event: &str) {
     // Never fail: a failing PreToolUse hook would deny the agent's tool call.
     let mut input = String::new();
-    if io::stdin().read_to_string(&mut input).is_ok()
-        && let Ok(payload) = serde_json::from_str::<Value>(&input)
-        && let Some(action) = classify(event, &payload)
-    {
-        let remote = settings::is_remote();
-        // While paused, ending a chat still clears it so it doesn't linger on the light.
-        if !(remote && settings::is_reporting_paused() && action != Action::End) {
-            let name = format!("{}{}", settings::file_prefix(remote), file_name(&session_id(&payload)));
-            let _ = record(&state_dir(), &name, action);
-        }
+    if io::stdin().read_to_string(&mut input).is_ok() {
+        record_event(event, &input);
     }
     print!("{{}}");
+}
+
+/// Records one hook event (`input` is the hook's JSON payload).
+pub fn record_event(event: &str, input: &str) {
+    let Ok(payload) = serde_json::from_str::<Value>(input) else {
+        return;
+    };
+    let Some(action) = classify(event, &payload) else {
+        return;
+    };
+    let remote = settings::is_remote();
+    // While paused, ending a chat still clears it so it doesn't linger on the light.
+    if !(remote && settings::is_reporting_paused() && action != Action::End) {
+        let name = format!("{}{}", settings::file_prefix(remote), file_name(&session_id(&payload)));
+        let _ = record(&state_dir(), &name, action);
+    }
+}
+
+/// WSL hooks can't run the Windows hook, so they leave each payload here as
+/// `<nanoseconds>.<pid>.<Event>` (written as `<nanoseconds>.<pid>.tmp`, then renamed).
+pub fn inbox_dir() -> PathBuf {
+    crate::sessions::data_dir().join("inbox")
+}
+
+/// Records the inbox events in order and deletes them; `apply: false` only deletes,
+/// for the backlog left while the tray app wasn't running.
+pub fn drain_inbox(dir: &Path, apply: bool) {
+    let Ok(entries) = fs::read_dir(dir) else {
+        return;
+    };
+    let mut names: Vec<String> = entries
+        .flatten()
+        .filter_map(|entry| entry.file_name().into_string().ok())
+        .collect();
+    names.sort();
+    for name in names {
+        let event = name.rsplit_once('.').map_or("", |(_, event)| event);
+        if apply && event == "tmp" {
+            continue;
+        }
+        let path = dir.join(&name);
+        if apply && let Ok(input) = fs::read_to_string(&path) {
+            record_event(event, &input);
+        }
+        let _ = fs::remove_file(&path);
+    }
 }
 
 /// BUSYLIGHT_STATE_DIR overrides the configured folder (for testing and scripts).
@@ -175,5 +213,30 @@ mod tests {
         assert!(!path.exists());
         record(&dir, &name, Action::End).unwrap();
         fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn drains_the_inbox_in_order() {
+        let base = std::env::temp_dir().join(format!("copilot-busylight-inbox-{}", std::process::id()));
+        let (inbox, state) = (base.join("inbox"), base.join("state"));
+        fs::create_dir_all(&inbox).unwrap();
+        // SAFETY: no other test reads this variable.
+        unsafe { std::env::set_var("BUSYLIGHT_STATE_DIR", &state) };
+        let payload = r#"{"session_id":"wsl"}"#;
+        fs::write(inbox.join("100.1.UserPromptSubmit"), payload).unwrap();
+        fs::write(inbox.join("200.1.Stop"), payload).unwrap();
+        fs::write(inbox.join("300.2.tmp"), payload).unwrap();
+        drain_inbox(&inbox, true);
+        let remote = settings::is_remote();
+        let session = state.join(format!("{}{}", settings::file_prefix(remote), file_name("wsl")));
+        assert_eq!(fs::read_to_string(&session).unwrap(), "idle");
+        assert!(inbox.join("300.2.tmp").exists());
+
+        fs::write(inbox.join("400.1.UserPromptSubmit"), payload).unwrap();
+        drain_inbox(&inbox, false);
+        assert_eq!(fs::read_dir(&inbox).unwrap().count(), 0);
+        assert_eq!(fs::read_to_string(&session).unwrap(), "idle");
+        unsafe { std::env::remove_var("BUSYLIGHT_STATE_DIR") };
+        fs::remove_dir_all(base).unwrap();
     }
 }

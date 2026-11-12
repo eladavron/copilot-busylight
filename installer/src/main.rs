@@ -8,11 +8,12 @@
 mod dialogs;
 mod files;
 mod registry;
+mod wsl;
 
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-use copilot_busylight::{HOOK_EXE, TRAY_EXE, VERSION, autostart, folder_dialog, sessions, settings};
+use copilot_busylight::{HOOK_EXE, TRAY_EXE, VERSION, autostart, folder_dialog, hook, sessions, settings};
 
 use dialogs::{Answer, ask_keep_folder, ask_mode, confirm, error, info};
 
@@ -111,6 +112,9 @@ fn install(options: &Options) -> Result<(), String> {
     }
     let setup_copy = target.join(SETUP_EXE);
     copy_self_to(&setup_copy)?;
+    let inbox = hook::inbox_dir();
+    let _ = std::fs::create_dir_all(&inbox);
+    let wsl_distros = wsl::install(&inbox);
 
     let saved = settings::set_remote(remote).and_then(|()| settings::set_sessions_dir(&sessions_dir, remote));
     saved.map_err(|code| format!("Could not save the settings (error {code})."))?;
@@ -131,7 +135,14 @@ fn install(options: &Options) -> Result<(), String> {
         .map_err(|e| format!("Installed, but could not start the tray app: {e}"))?;
 
     if !options.quiet {
-        info(&finished_message(remote, &sessions_dir));
+        let mut message = finished_message(remote, &sessions_dir);
+        if !wsl_distros.is_empty() {
+            message.push_str(&format!(
+                "\n\nAlso installed the hooks in WSL: {}.",
+                wsl_distros.join(", ")
+            ));
+        }
+        info(&message);
     }
     Ok(())
 }
@@ -203,6 +214,8 @@ fn uninstall(options: &Options) -> Result<(), String> {
     autostart::disable();
     registry::delete_uninstall_entry();
     files::remove(&files::hooks_dir().join("busylight.json"));
+    wsl::uninstall();
+    files::remove_dir(&hook::inbox_dir());
     files::remove(&target.join(TRAY_EXE));
     files::remove(&target.join(HOOK_EXE));
     for (name, _) in LICENSE_FILES {

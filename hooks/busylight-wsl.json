@@ -1,0 +1,32 @@
+{
+  "version": 1,
+  "hooks": {
+    "SessionStart": [
+      { "type": "command", "command": "{ d='@INBOX@'; f=\"$d/$(date +%s%N).$$\"; cat > \"$f.tmp\" && mv \"$f.tmp\" \"$f.SessionStart\"; } 2>/dev/null; echo '{}'", "timeoutSec": 5 }
+    ],
+    "UserPromptSubmit": [
+      { "type": "command", "command": "{ d='@INBOX@'; f=\"$d/$(date +%s%N).$$\"; cat > \"$f.tmp\" && mv \"$f.tmp\" \"$f.UserPromptSubmit\"; } 2>/dev/null; echo '{}'", "timeoutSec": 5 }
+    ],
+    "PreToolUse": [
+      { "type": "command", "command": "{ d='@INBOX@'; f=\"$d/$(date +%s%N).$$\"; cat > \"$f.tmp\" && mv \"$f.tmp\" \"$f.PreToolUse\"; } 2>/dev/null; echo '{}'", "timeoutSec": 5 }
+    ],
+    "PostToolUse": [
+      { "type": "command", "command": "{ d='@INBOX@'; f=\"$d/$(date +%s%N).$$\"; cat > \"$f.tmp\" && mv \"$f.tmp\" \"$f.PostToolUse\"; } 2>/dev/null; echo '{}'", "timeoutSec": 5 }
+    ],
+    "PostToolUseFailure": [
+      { "type": "command", "command": "{ d='@INBOX@'; f=\"$d/$(date +%s%N).$$\"; cat > \"$f.tmp\" && mv \"$f.tmp\" \"$f.PostToolUseFailure\"; } 2>/dev/null; echo '{}'", "timeoutSec": 5 }
+    ],
+    "PreCompact": [
+      { "type": "command", "command": "{ d='@INBOX@'; f=\"$d/$(date +%s%N).$$\"; cat > \"$f.tmp\" && mv \"$f.tmp\" \"$f.PreCompact\"; } 2>/dev/null; echo '{}'", "timeoutSec": 5 }
+    ],
+    "Stop": [
+      { "type": "command", "command": "{ d='@INBOX@'; f=\"$d/$(date +%s%N).$$\"; cat > \"$f.tmp\" && mv \"$f.tmp\" \"$f.Stop\"; } 2>/dev/null; echo '{}'", "timeoutSec": 5 }
+    ],
+    "SessionEnd": [
+      { "type": "command", "command": "{ d='@INBOX@'; f=\"$d/$(date +%s%N).$$\"; cat > \"$f.tmp\" && mv \"$f.tmp\" \"$f.SessionEnd\"; } 2>/dev/null; echo '{}'", "timeoutSec": 5 }
+    ],
+    "notification": [
+      { "type": "command", "command": "{ d='@INBOX@'; f=\"$d/$(date +%s%N).$$\"; cat > \"$f.tmp\" && mv \"$f.tmp\" \"$f.Notification\"; } 2>/dev/null; echo '{}'", "timeoutSec": 5 }
+    ]
+  }
+}

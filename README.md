@@ -52,7 +52,7 @@ What the installer does:
 - Sets the tray app to start with Windows and starts it.
 - Adds **Copilot Busylight** to **Settings → Apps → Installed apps**, for uninstalling.
 
-Run a newer setup exe to update; it closes the running tray app first.
+Run a newer setup exe to update; it closes the running tray app first. Updating also rewrites the hooks file, including the WSL copies.
 
 Command-line options:
 
@@ -137,6 +137,7 @@ These and the colours are constants in `src/sessions.rs` and `src/light.rs`; cha
 ## Troubleshooting
 
 - **Nothing happens in a chat.** Hooks only load when a chat starts, so start a new one. Check that the session target is **Copilot**, and that `busylight.json` appears on the **Hooks** page under Chat → Open Customizations.
+- **"Migrate Hook" warning on `busylight.json`.** Versions before 0.2.1 wrote the hooks with capitalised event names (`PreToolUse`, `Stop`), which VS Code now flags as the deprecated Local hook format. Run the current setup exe on each machine (your PC and any RDP server) to replace the file. Don't use **Migrate with Agent** on it: the next setup run would overwrite the migrated copy anyway.
 - **Check the tray app.** Hover over the tray icon: it shows the current state and whether the light is connected. If the state changes but the light shows "not connected", replug the light; the app retries every 5 seconds.
 - **Test without Copilot.** Pipe a fake event into the hook and watch the light and tray icon:
 

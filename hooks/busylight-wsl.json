@@ -1,28 +1,28 @@
 {
   "version": 1,
   "hooks": {
-    "SessionStart": [
+    "sessionStart": [
       { "type": "command", "command": "{ d='@INBOX@'; f=\"$d/$(date +%s%N).$$\"; cat > \"$f.tmp\" && mv \"$f.tmp\" \"$f.SessionStart\"; } 2>/dev/null; echo '{}'", "timeoutSec": 5 }
     ],
-    "UserPromptSubmit": [
+    "userPromptSubmitted": [
       { "type": "command", "command": "{ d='@INBOX@'; f=\"$d/$(date +%s%N).$$\"; cat > \"$f.tmp\" && mv \"$f.tmp\" \"$f.UserPromptSubmit\"; } 2>/dev/null; echo '{}'", "timeoutSec": 5 }
     ],
-    "PreToolUse": [
+    "preToolUse": [
       { "type": "command", "command": "{ d='@INBOX@'; f=\"$d/$(date +%s%N).$$\"; cat > \"$f.tmp\" && mv \"$f.tmp\" \"$f.PreToolUse\"; } 2>/dev/null; echo '{}'", "timeoutSec": 5 }
     ],
-    "PostToolUse": [
+    "postToolUse": [
       { "type": "command", "command": "{ d='@INBOX@'; f=\"$d/$(date +%s%N).$$\"; cat > \"$f.tmp\" && mv \"$f.tmp\" \"$f.PostToolUse\"; } 2>/dev/null; echo '{}'", "timeoutSec": 5 }
     ],
-    "PostToolUseFailure": [
+    "postToolUseFailure": [
       { "type": "command", "command": "{ d='@INBOX@'; f=\"$d/$(date +%s%N).$$\"; cat > \"$f.tmp\" && mv \"$f.tmp\" \"$f.PostToolUseFailure\"; } 2>/dev/null; echo '{}'", "timeoutSec": 5 }
     ],
-    "PreCompact": [
+    "preCompact": [
       { "type": "command", "command": "{ d='@INBOX@'; f=\"$d/$(date +%s%N).$$\"; cat > \"$f.tmp\" && mv \"$f.tmp\" \"$f.PreCompact\"; } 2>/dev/null; echo '{}'", "timeoutSec": 5 }
     ],
-    "Stop": [
+    "agentStop": [
       { "type": "command", "command": "{ d='@INBOX@'; f=\"$d/$(date +%s%N).$$\"; cat > \"$f.tmp\" && mv \"$f.tmp\" \"$f.Stop\"; } 2>/dev/null; echo '{}'", "timeoutSec": 5 }
     ],
-    "SessionEnd": [
+    "sessionEnd": [
       { "type": "command", "command": "{ d='@INBOX@'; f=\"$d/$(date +%s%N).$$\"; cat > \"$f.tmp\" && mv \"$f.tmp\" \"$f.SessionEnd\"; } 2>/dev/null; echo '{}'", "timeoutSec": 5 }
     ],
     "notification": [

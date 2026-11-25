@@ -1,28 +1,28 @@
 {
   "version": 1,
   "hooks": {
-    "SessionStart": [
+    "sessionStart": [
       { "type": "command", "command": "& \"$HOME\\.copilot\\busylight\\copilot-busylight-hook.exe\" SessionStart", "timeoutSec": 5 }
     ],
-    "UserPromptSubmit": [
+    "userPromptSubmitted": [
       { "type": "command", "command": "& \"$HOME\\.copilot\\busylight\\copilot-busylight-hook.exe\" UserPromptSubmit", "timeoutSec": 5 }
     ],
-    "PreToolUse": [
+    "preToolUse": [
       { "type": "command", "command": "& \"$HOME\\.copilot\\busylight\\copilot-busylight-hook.exe\" PreToolUse", "timeoutSec": 5 }
     ],
-    "PostToolUse": [
+    "postToolUse": [
       { "type": "command", "command": "& \"$HOME\\.copilot\\busylight\\copilot-busylight-hook.exe\" PostToolUse", "timeoutSec": 5 }
     ],
-    "PostToolUseFailure": [
+    "postToolUseFailure": [
       { "type": "command", "command": "& \"$HOME\\.copilot\\busylight\\copilot-busylight-hook.exe\" PostToolUseFailure", "timeoutSec": 5 }
     ],
-    "PreCompact": [
+    "preCompact": [
       { "type": "command", "command": "& \"$HOME\\.copilot\\busylight\\copilot-busylight-hook.exe\" PreCompact", "timeoutSec": 5 }
     ],
-    "Stop": [
+    "agentStop": [
       { "type": "command", "command": "& \"$HOME\\.copilot\\busylight\\copilot-busylight-hook.exe\" Stop", "timeoutSec": 5 }
     ],
-    "SessionEnd": [
+    "sessionEnd": [
       { "type": "command", "command": "& \"$HOME\\.copilot\\busylight\\copilot-busylight-hook.exe\" SessionEnd", "timeoutSec": 5 }
     ],
     "notification": [

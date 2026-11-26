@@ -13,6 +13,6 @@ $ErrorActionPreference = 'Stop'
 $version = (Select-String -Path (Join-Path $PSScriptRoot 'Cargo.toml') -Pattern '^version\s*=\s*"(.+)"').Matches[0].Groups[1].Value
 $dist = Join-Path $PSScriptRoot 'dist'
 New-Item -ItemType Directory -Force $dist | Out-Null
-$output = Join-Path $dist "copilot-busylight-setup-$version.exe"
-Copy-Item (Join-Path $PSScriptRoot 'target\release\copilot-busylight-setup.exe') $output -Force
+$output = Join-Path $dist "agent-busylight-setup-$version.exe"
+Copy-Item (Join-Path $PSScriptRoot 'target\release\agent-busylight-setup.exe') $output -Force
 Get-Item $output | Select-Object Name, @{ n = 'Size (KB)'; e = { [math]::Round($_.Length / 1KB) } }

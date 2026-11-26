@@ -2,30 +2,20 @@
 
 use std::fs;
 use std::os::windows::process::CommandExt;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::process::Command;
 use std::thread::sleep;
 use std::time::{Duration, Instant};
 
-use copilot_busylight::wide;
+use agent_busylight::{APP_NAME, wide};
 use windows_sys::Win32::Foundation::{CloseHandle, LPARAM, WPARAM};
 use windows_sys::Win32::System::Threading::{OpenProcess, PROCESS_SYNCHRONIZE, WaitForSingleObject};
 use windows_sys::Win32::UI::WindowsAndMessaging::{FindWindowW, GetWindowThreadProcessId, PostMessageW, WM_CLOSE};
 
 const CREATE_NO_WINDOW: u32 = 0x0800_0000;
-/// Window class registered by the tray app in src/tray.rs.
-const TRAY_WINDOW_CLASS: &str = "CopilotBusylightTray";
+/// Window class of copilot-busylight 0.2.x and earlier.
+const LEGACY_TRAY_WINDOW_CLASS: &str = "CopilotBusylightTray";
 const STOP_TIMEOUT: Duration = Duration::from_secs(5);
-
-pub fn hooks_dir() -> PathBuf {
-    match std::env::var_os("COPILOT_HOME").filter(|dir| !dir.is_empty()) {
-        Some(home) => PathBuf::from(home).join("hooks"),
-        None => copilot_busylight::sessions::data_dir()
-            .parent()
-            .map(|copilot| copilot.join("hooks"))
-            .unwrap_or_default(),
-    }
-}
 
 /// Writes atomically; retries briefly because a just-closed exe can stay locked.
 pub fn write(path: &Path, bytes: &[u8]) -> Result<(), String> {
@@ -74,9 +64,15 @@ pub fn same_file(a: &Path, b: &Path) -> bool {
     }
 }
 
-/// Asks the tray app to quit (it turns the light off first) and waits for it.
+/// Asks the tray app, and copilot-busylight's if it is still running, to quit
+/// (they turn the light off first) and waits for them.
 pub fn stop_tray_app() -> Result<(), String> {
-    let class = wide(TRAY_WINDOW_CLASS);
+    stop_window(agent_busylight::tray::WINDOW_CLASS)?;
+    stop_window(LEGACY_TRAY_WINDOW_CLASS)
+}
+
+fn stop_window(class: &str) -> Result<(), String> {
+    let class = wide(class);
     let hwnd = unsafe { FindWindowW(class.as_ptr(), std::ptr::null()) };
     if hwnd.is_null() {
         return Ok(());
@@ -95,10 +91,9 @@ pub fn stop_tray_app() -> Result<(), String> {
         if exited {
             Ok(())
         } else {
-            Err(
-                "The running Copilot Busylight tray app didn't close. Quit it from its tray menu and try again."
-                    .to_owned(),
-            )
+            Err(format!(
+                "The running {APP_NAME} tray app didn't close. Quit it from its tray menu and try again."
+            ))
         }
     }
 }

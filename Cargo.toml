@@ -1,10 +1,10 @@
 [package]
-name = "copilot-busylight"
+name = "agent-busylight"
 version.workspace = true
 license.workspace = true
 authors.workspace = true
 edition = "2024"
-description = "Kuando Busylight status light for the GitHub Copilot agent, as a Windows tray app"
+description = "Kuando Busylight status light for AI coding agents (GitHub Copilot, Claude Code), as a Windows tray app"
 publish = false
 
 [workspace]
@@ -13,20 +13,21 @@ members = [".", "installer"]
 default-members = ["."]
 
 [workspace.package]
-version = "0.2.1"
+version = "0.3.0"
 license = "Apache-2.0"
 authors = ["Elad Avron"]
 
 [[bin]]
-name = "copilot-busylight"
+name = "agent-busylight"
 path = "src/main.rs"
 
 [[bin]]
-name = "copilot-busylight-hook"
+name = "agent-busylight-hook"
 path = "src/hook_main.rs"
 
 [dependencies]
-serde_json = "1.0.154"
+# preserve_order keeps the user's key order when editing Claude's settings.json.
+serde_json = { version = "1.0.154", features = ["preserve_order"] }
 
 # 0.59 ships prebuilt import libraries; 0.60+ needs a full MinGW dlltool on the GNU target.
 [dependencies.windows-sys]

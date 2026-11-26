@@ -2,22 +2,24 @@
 
 use std::path::Path;
 
-use copilot_busylight::registry::{delete_key, set_dword, set_string};
-use copilot_busylight::{TRAY_EXE, VERSION};
+use agent_busylight::registry::{delete_key, set_dword, set_string};
+use agent_busylight::{APP_NAME, TRAY_EXE, VERSION};
 use windows_sys::Win32::Foundation::WIN32_ERROR;
 
-const UNINSTALL_KEY: &str = r"Software\Microsoft\Windows\CurrentVersion\Uninstall\CopilotBusylight";
+const UNINSTALL_KEY: &str = r"Software\Microsoft\Windows\CurrentVersion\Uninstall\AgentBusylight";
+/// Entry of copilot-busylight 0.2.x and earlier.
+const LEGACY_UNINSTALL_KEY: &str = r"Software\Microsoft\Windows\CurrentVersion\Uninstall\CopilotBusylight";
 
 pub fn write_uninstall_entry(setup_exe: &Path, install_dir: &Path, remote: bool) -> Result<(), WIN32_ERROR> {
     let exe = setup_exe.display();
     let name = if remote {
-        "Copilot Busylight (remote server)"
+        format!("{APP_NAME} (remote server)")
     } else {
-        "Copilot Busylight"
+        APP_NAME.to_owned()
     };
-    set_string(UNINSTALL_KEY, "DisplayName", name)?;
+    set_string(UNINSTALL_KEY, "DisplayName", &name)?;
     set_string(UNINSTALL_KEY, "DisplayVersion", VERSION)?;
-    set_string(UNINSTALL_KEY, "Publisher", "copilot-busylight")?;
+    set_string(UNINSTALL_KEY, "Publisher", "agent-busylight")?;
     set_string(UNINSTALL_KEY, "InstallLocation", &install_dir.display().to_string())?;
     set_string(
         UNINSTALL_KEY,
@@ -36,4 +38,8 @@ pub fn write_uninstall_entry(setup_exe: &Path, install_dir: &Path, remote: bool)
 
 pub fn delete_uninstall_entry() {
     delete_key(UNINSTALL_KEY);
+}
+
+pub fn delete_legacy_uninstall_entry() {
+    delete_key(LEGACY_UNINSTALL_KEY);
 }

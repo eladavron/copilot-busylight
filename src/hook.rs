@@ -1,5 +1,5 @@
-//! `copilot-busylight hook <Event>`: records one chat's state from a Copilot
-//! hook event (JSON on stdin).
+//! `agent-busylight-hook <Event>`: records one chat's state from a Copilot or
+//! Claude Code hook event (JSON on stdin).
 
 use std::fs;
 use std::io::{self, Read};
@@ -14,6 +14,9 @@ use crate::settings;
 
 const ASK_TOOLS: &[&str] = &["vscode_askQuestions", "ask_user", "AskUserQuestion"];
 const ATTENTION_NOTIFICATIONS: &[&str] = &["permission_prompt", "elicitation_dialog"];
+/// Claude Code sends it a minute after a turn ends; it also ends a turn
+/// interrupted with Esc, which sends no Stop.
+const IDLE_NOTIFICATION: &str = "idle_prompt";
 
 #[derive(Debug, PartialEq)]
 pub enum Action {
@@ -100,13 +103,18 @@ pub fn classify(event: &str, payload: &Value) -> Option<Action> {
             };
             Some(Action::Set(state))
         }
-        "Notification" => text(payload, "notification_type")
-            .filter(|kind| ATTENTION_NOTIFICATIONS.contains(kind))
-            .map(|_| Action::Set(Light::Attention)),
+        // Claude Code, the moment it asks to approve a tool.
+        "PermissionRequest" => Some(Action::Set(Light::Attention)),
+        "Notification" => match text(payload, "notification_type")? {
+            kind if ATTENTION_NOTIFICATIONS.contains(&kind) => Some(Action::Set(Light::Attention)),
+            IDLE_NOTIFICATION => Some(Action::Set(Light::Idle)),
+            _ => None,
+        },
         "UserPromptSubmit" | "PostToolUse" | "PostToolUseFailure" | "SubagentStart" | "SubagentStop" | "PreCompact" => {
             Some(Action::Set(Light::Busy))
         }
-        "SessionStart" | "Stop" => Some(Action::Set(Light::Idle)),
+        // Claude Code sends StopFailure instead of Stop when a turn ends on an API error.
+        "SessionStart" | "Stop" | "StopFailure" => Some(Action::Set(Light::Idle)),
         "SessionEnd" => Some(Action::End),
         _ => None,
     }
@@ -164,6 +172,15 @@ mod tests {
         let empty = json!({});
         assert_eq!(classify("UserPromptSubmit", &empty), Some(Action::Set(Light::Busy)));
         assert_eq!(classify("Stop", &empty), Some(Action::Set(Light::Idle)));
+        assert_eq!(classify("StopFailure", &empty), Some(Action::Set(Light::Idle)));
+        assert_eq!(
+            classify("PermissionRequest", &empty),
+            Some(Action::Set(Light::Attention))
+        );
+        assert_eq!(
+            classify("PreToolUse", &json!({"tool_name": "AskUserQuestion"})),
+            Some(Action::Set(Light::Attention))
+        );
         assert_eq!(classify("SessionEnd", &empty), Some(Action::End));
         assert_eq!(classify("Unknown", &empty), None);
         assert_eq!(
@@ -182,6 +199,11 @@ mod tests {
             classify("Notification", &json!({"notification_type": "shell_completed"})),
             None
         );
+        assert_eq!(
+            classify("Notification", &json!({"notification_type": "idle_prompt"})),
+            Some(Action::Set(Light::Idle))
+        );
+        assert_eq!(classify("Notification", &empty), None);
     }
 
     #[test]
@@ -202,7 +224,7 @@ mod tests {
 
     #[test]
     fn records_and_ends_a_session() {
-        let dir = std::env::temp_dir().join(format!("copilot-busylight-test-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("agent-busylight-test-{}", std::process::id()));
         let name = file_name("s1");
         record(&dir, &name, Action::Set(Light::Busy)).unwrap();
         let path = dir.join(&name);
@@ -217,7 +239,7 @@ mod tests {
 
     #[test]
     fn drains_the_inbox_in_order() {
-        let base = std::env::temp_dir().join(format!("copilot-busylight-inbox-{}", std::process::id()));
+        let base = std::env::temp_dir().join(format!("agent-busylight-inbox-{}", std::process::id()));
         let (inbox, state) = (base.join("inbox"), base.join("state"));
         fs::create_dir_all(&inbox).unwrap();
         // SAFETY: no other test reads this variable.

@@ -1,5 +1,5 @@
 #![windows_subsystem = "windows"]
 
 fn main() {
-    copilot_busylight::tray::run();
+    agent_busylight::tray::run();
 }

@@ -60,10 +60,12 @@ impl Light {
 
 /// Install folder for the exes.
 pub fn data_dir() -> PathBuf {
-    let home = std::env::var_os("USERPROFILE")
-        .or_else(|| std::env::var_os("HOME"))
-        .unwrap_or_default();
-    PathBuf::from(home).join(".copilot").join("busylight")
+    crate::home().join(".agent-busylight")
+}
+
+/// Install folder of copilot-busylight 0.2.x and earlier.
+pub fn legacy_data_dir() -> PathBuf {
+    crate::home().join(".copilot").join("busylight")
 }
 
 /// Applies the stale rules; `None` means the session is gone.

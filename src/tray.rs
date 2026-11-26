@@ -4,6 +4,7 @@ use std::cell::RefCell;
 use std::mem::{size_of, zeroed};
 use std::ptr::{null, null_mut};
 use std::sync::Arc;
+use std::sync::atomic::AtomicBool;
 use std::sync::atomic::Ordering::Relaxed;
 use std::thread::JoinHandle;
 
@@ -16,17 +17,21 @@ use windows_sys::Win32::UI::Shell::{
 };
 use windows_sys::Win32::UI::WindowsAndMessaging::{
     AppendMenuW, CreatePopupMenu, CreateWindowExW, DefWindowProcW, DestroyMenu, DestroyWindow, DispatchMessageW,
-    GetCursorPos, GetMessageW, IDOK, MB_ICONWARNING, MB_OKCANCEL, MF_CHECKED, MF_GRAYED, MF_SEPARATOR, MF_STRING,
-    MessageBoxW, PostMessageW, PostQuitMessage, RegisterClassW, RegisterWindowMessageW, SetForegroundWindow,
-    TPM_NONOTIFY, TPM_RETURNCMD, TPM_RIGHTBUTTON, TrackPopupMenu, TranslateMessage, WM_APP, WM_CLOSE, WM_DESTROY,
-    WM_ENDSESSION, WM_LBUTTONUP, WM_NULL, WM_RBUTTONUP, WNDCLASSW,
+    GetCursorPos, GetMessageW, IDOK, MB_ICONERROR, MB_ICONINFORMATION, MB_ICONWARNING, MB_OK, MB_OKCANCEL,
+    MB_SETFOREGROUND, MESSAGEBOX_STYLE, MF_CHECKED, MF_GRAYED, MF_POPUP, MF_SEPARATOR, MF_STRING, MessageBoxW,
+    PostMessageW, PostQuitMessage, RegisterClassW, RegisterWindowMessageW, SetForegroundWindow, TPM_NONOTIFY,
+    TPM_RETURNCMD, TPM_RIGHTBUTTON, TrackPopupMenu, TranslateMessage, WM_APP, WM_CLOSE, WM_DESTROY, WM_ENDSESSION,
+    WM_LBUTTONUP, WM_NULL, WM_RBUTTONUP, WNDCLASSW,
 };
 
+use crate::harness::Harness;
 use crate::icons::Icons;
 use crate::light::{self, Report, Shared};
 use crate::sessions::Light;
-use crate::{autostart, folder_dialog, settings, wide};
+use crate::{APP_NAME, autostart, folder_dialog, settings, wide};
 
+/// Registered by the tray window; the setup exe finds the running tray app by it.
+pub const WINDOW_CLASS: &str = "AgentBusylightTray";
 const WM_TRAY: u32 = WM_APP + 1;
 const WM_REPORT: u32 = WM_APP + 2;
 const TRAY_ID: u32 = 1;
@@ -34,6 +39,11 @@ const CMD_PAUSE: i32 = 1;
 const CMD_AUTOSTART: i32 = 2;
 const CMD_QUIT: i32 = 3;
 const CMD_FOLDER: i32 = 4;
+/// Plus the harness's index in `Harness::ALL`.
+const CMD_HOOKS: i32 = 10;
+
+/// Set while hooks are being added or removed in the background.
+static HOOKS_BUSY: AtomicBool = AtomicBool::new(false);
 
 struct App {
     hwnd: HWND,
@@ -54,7 +64,7 @@ fn with_app<R>(f: impl FnOnce(&mut App) -> R) -> Option<R> {
 
 pub fn run() {
     unsafe {
-        let mutex_name = wide("Local\\copilot-busylight");
+        let mutex_name = wide("Local\\agent-busylight");
         // Held until the process exits.
         let _mutex = CreateMutexW(null(), 1, mutex_name.as_ptr());
         if GetLastError() == ERROR_ALREADY_EXISTS {
@@ -63,7 +73,7 @@ pub fn run() {
         SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
 
         let instance = GetModuleHandleW(null());
-        let class = wide("CopilotBusylightTray");
+        let class = wide(WINDOW_CLASS);
         let window_class = WNDCLASSW {
             lpfnWndProc: Some(window_proc),
             hInstance: instance,
@@ -183,6 +193,23 @@ fn show_menu() {
             pause_label,
         );
         add(MF_STRING, CMD_FOLDER, "Sessions folder...");
+        let hooks_menu = CreatePopupMenu();
+        let busy = HOOKS_BUSY.load(Relaxed);
+        for (index, harness) in Harness::ALL.into_iter().enumerate() {
+            let installed = harness.is_installed();
+            let mut label = harness.name().to_owned();
+            if !installed && !harness.is_detected() {
+                label.push_str(" (not detected)");
+            }
+            let flags = MF_STRING | if installed { MF_CHECKED } else { 0 } | if busy { MF_GRAYED } else { 0 };
+            AppendMenuW(
+                hooks_menu,
+                flags,
+                (CMD_HOOKS + index as i32) as usize,
+                wide(&label).as_ptr(),
+            );
+        }
+        AppendMenuW(menu, MF_STRING | MF_POPUP, hooks_menu as usize, wide("Hooks").as_ptr());
         add(
             MF_STRING | if autostart::is_enabled() { MF_CHECKED } else { 0 },
             CMD_AUTOSTART,
@@ -211,14 +238,54 @@ fn show_menu() {
     with_app(|app| app.run_command(command));
 }
 
+fn message_box(hwnd: HWND, text: &str, style: MESSAGEBOX_STYLE) -> i32 {
+    let (text, title) = (wide(text), wide(APP_NAME));
+    unsafe { MessageBoxW(hwnd, text.as_ptr(), title.as_ptr(), style) }
+}
+
 fn confirm_folder_change(hwnd: HWND, dir: &std::path::Path) -> bool {
-    let text = wide(&format!(
+    let text = format!(
         "Use this sessions folder?\n\n{}\n\nThe change only applies to new chats. Chats that are open \
          now disappear from the light until their next activity.",
         dir.display()
-    ));
-    let title = wide("Copilot Busylight");
-    unsafe { MessageBoxW(hwnd, text.as_ptr(), title.as_ptr(), MB_OKCANCEL | MB_ICONWARNING) == IDOK }
+    );
+    message_box(hwnd, &text, MB_OKCANCEL | MB_ICONWARNING) == IDOK
+}
+
+/// Adds or removes a harness's hooks on another thread (WSL can take a while),
+/// then reports the result.
+fn toggle_hooks(harness: Harness) {
+    if HOOKS_BUSY.swap(true, Relaxed) {
+        return;
+    }
+    let install = !harness.is_installed();
+    std::thread::spawn(move || {
+        let name = harness.name();
+        let (text, icon) = if install {
+            match harness.install() {
+                Ok(distros) => {
+                    let mut text = format!(
+                        "Added the {name} hooks.\n\nStart a NEW {name} chat or session: open ones don't load new hooks."
+                    );
+                    if !distros.is_empty() {
+                        text.push_str(&format!("\n\nAlso added them in WSL: {}.", distros.join(", ")));
+                    }
+                    (text, MB_ICONINFORMATION)
+                }
+                Err(error) => (format!("Could not add the {name} hooks.\n\n{error}"), MB_ICONERROR),
+            }
+        } else {
+            match harness.uninstall() {
+                Ok(()) => (format!("Removed the {name} hooks."), MB_ICONINFORMATION),
+                Err(error) => (format!("Could not remove the {name} hooks.\n\n{error}"), MB_ICONERROR),
+            }
+        };
+        // So the next quiet update keeps this choice.
+        let installed: Vec<Harness> = Harness::ALL.into_iter().filter(|h| h.is_installed()).collect();
+        let _ = settings::set_harnesses(&installed);
+        HOOKS_BUSY.store(false, Relaxed);
+        message_box(null_mut(), &text, MB_OK | MB_SETFOREGROUND | icon);
+    });
 }
 
 fn describe(report: &Report, remote: bool) -> (String, String) {
@@ -261,12 +328,10 @@ impl App {
         data.uFlags = NIF_ICON | NIF_TIP;
         data.hIcon = self.icons.for_report(&report, self.shared.remote);
         let (status, device) = describe(&report, self.shared.remote);
-        let title = if self.shared.remote {
-            "Copilot Busylight (server)"
-        } else {
-            "Copilot Busylight"
-        };
-        let tip: Vec<u16> = format!("{title}\n{status}\n{device}").encode_utf16().collect();
+        let server = if self.shared.remote { " (server)" } else { "" };
+        let tip: Vec<u16> = format!("{APP_NAME}{server}\n{status}\n{device}")
+            .encode_utf16()
+            .collect();
         let len = tip.len().min(data.szTip.len() - 1);
         data.szTip[..len].copy_from_slice(&tip[..len]);
         data
@@ -305,7 +370,14 @@ impl App {
                 unsafe { DestroyWindow(self.hwnd) };
                 return;
             }
-            _ => {}
+            _ => {
+                if let Some(&harness) = usize::try_from(command - CMD_HOOKS)
+                    .ok()
+                    .and_then(|index| Harness::ALL.get(index))
+                {
+                    toggle_hooks(harness);
+                }
+            }
         }
         // Reports that arrived while the menu was open were skipped.
         self.refresh_icon();

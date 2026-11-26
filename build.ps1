@@ -1,10 +1,10 @@
 <#
 .SYNOPSIS
-Builds copilot-busylight with the Rust GNU toolchain (no Visual Studio needed).
+Builds agent-busylight with the Rust GNU toolchain (no Visual Studio needed).
 
 .DESCRIPTION
 Runs the tests with -Test, builds the tray app and hook, then builds
-copilot-busylight-setup.exe, which embeds them. All three end up in target\release.
+agent-busylight-setup.exe, which embeds them. All three end up in target\release.
 #>
 [CmdletBinding()]
 param(
@@ -24,15 +24,15 @@ if (-not (Get-Command cargo -ErrorAction SilentlyContinue)) {
 Push-Location $PSScriptRoot
 try {
     if ($Test) {
-        cargo test --release -p copilot-busylight
+        cargo test --release -p agent-busylight
         if ($LASTEXITCODE) { throw 'Tests failed' }
     }
-    cargo build --release -p copilot-busylight
+    cargo build --release -p agent-busylight
     if ($LASTEXITCODE) { throw 'Build failed' }
     # Must come second: it embeds the exes built above.
-    cargo build --release -p copilot-busylight-setup
+    cargo build --release -p agent-busylight-setup
     if ($LASTEXITCODE) { throw 'Installer build failed' }
-    Get-Item target\release\copilot-busylight.exe, target\release\copilot-busylight-hook.exe, target\release\copilot-busylight-setup.exe |
+    Get-Item target\release\agent-busylight.exe, target\release\agent-busylight-hook.exe, target\release\agent-busylight-setup.exe |
         Select-Object Name, @{ n = 'Size (KB)'; e = { [math]::Round($_.Length / 1KB) } }
 } finally {
     Pop-Location
